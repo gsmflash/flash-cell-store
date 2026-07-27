@@ -1,0 +1,20 @@
+{
+  "name": "flash-cell-store",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"@flash-cell/*\" run dev",
+    "dev:backend": "pnpm --filter @flash-cell/backend run dev",
+    "dev:frontend": "pnpm --filter @flash-cell/frontend run dev",
+    "build": "pnpm --filter @flash-cell/shared run build && pnpm --filter \"@flash-cell/backend\" run build && pnpm --filter \"@flash-cell/frontend\" run build",
+    "typecheck": "pnpm -r run typecheck",
+    "db:generate": "pnpm --filter @flash-cell/backend run db:generate",
+    "db:migrate": "pnpm --filter @flash-cell/backend run db:migrate",
+    "db:push": "pnpm --filter @flash-cell/backend run db:push",
+    "db:studio": "pnpm --filter @flash-cell/backend run db:studio"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}
