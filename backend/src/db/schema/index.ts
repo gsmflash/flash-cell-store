@@ -1,6 +1,32 @@
-// Schema do banco de dados — será populado nas próximas etapas.
-// Exemplo: export * from './products';
-// Exemplo: export * from './users';
+// Enums
+export * from './enums';
 
-// Exportação vazia para tornar este arquivo um módulo TypeScript válido.
-export {};
+// Usuários e perfis
+export * from './users';
+
+// Clientes e endereços
+export * from './customers';
+
+// Catálogo: marcas, categorias, produtos, imagens
+export * from './catalog';
+
+// Estoque, movimentações e fornecedores
+export * from './stock';
+
+// Ordens de serviço, técnicos, defeitos, serviços, peças, histórico, checklists
+export * from './service-orders';
+
+// Garantias
+export * from './warranties';
+
+// Comércio: cupons, pedidos, itens, carrinho, favoritos
+export * from './commerce';
+
+// Pagamentos
+export * from './payments';
+
+// Loja: banners e configurações
+export * from './store';
+
+// Logs do sistema
+export * from './logs';
