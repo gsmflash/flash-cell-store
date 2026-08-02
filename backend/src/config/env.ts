@@ -18,16 +18,30 @@ const envSchema = z.object({
       'DATABASE_URL deve ser uma URL PostgreSQL válida',
     ),
   CORS_ORIGIN: z.string().default('http://localhost:5173'),
-  // JWT
-  JWT_SECRET: z.string().min(32, 'JWT_SECRET deve ter no mínimo 32 caracteres'),
-  JWT_EXPIRES_IN: z.string().default('7d'),
-  JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
-  // Cloudflare R2 — opcionais
+  // URL pública do frontend — usada nos links de retorno do checkout de pagamento.
+  FRONTEND_URL: z.string().default('http://localhost:5173'),
+  // Mercado Pago
+  MERCADOPAGO_ACCESS_TOKEN: z.string().optional(),
+  // Segredo usado para validar a assinatura do webhook (ver docs do Mercado Pago).
+  MERCADOPAGO_WEBHOOK_SECRET: z.string().optional(),
+  // E-mail transacional (Resend)
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('Flash Cell Store <naoresponda@flashcell.com.br>'),
+  // Monitoramento de erros — ver lib/errorReporting.ts para como ativar de verdade.
+  SENTRY_DSN: z.string().optional(),
+  // Armazenamento de arquivos — Cloudflare R2 (compatível com S3)
   R2_ACCOUNT_ID: z.string().optional(),
   R2_ACCESS_KEY_ID: z.string().optional(),
   R2_SECRET_ACCESS_KEY: z.string().optional(),
   R2_BUCKET_NAME: z.string().optional(),
   R2_PUBLIC_URL: z.string().url().optional(),
+  // JWT — access e refresh usam segredos independentes.
+  // Nunca reutilize o mesmo valor para os dois: um vazamento do segredo de
+  // access token não pode servir para forjar refresh tokens (e vice-versa).
+  JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET deve ter no mínimo 32 caracteres'),
+  JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
+  JWT_REFRESH_SECRET: z.string().min(32, 'JWT_REFRESH_SECRET deve ter no mínimo 32 caracteres'),
+  JWT_REFRESH_EXPIRES_IN: z.string().default('30d'),
 });
 
 const parsed = envSchema.safeParse(process.env);

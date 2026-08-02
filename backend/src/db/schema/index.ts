@@ -16,8 +16,12 @@ export * from './stock';
 // Ordens de serviço, técnicos, defeitos, serviços, peças, histórico, checklists
 export * from './service-orders';
 
+// Financeiro: contas a receber e histórico de pagamentos (base do futuro módulo Financeiro)
+export * from './financial';
+
 // Garantias
 export * from './warranties';
+export * from './warranty-policies';
 
 // Comércio: cupons, pedidos, itens, carrinho, favoritos
 export * from './commerce';

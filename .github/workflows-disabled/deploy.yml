@@ -1,0 +1,46 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend
+        run: pnpm --filter @flash-cell/frontend run build
+        env:
+          # URL pública do backend em produção (Railway/Render) — configure
+          # este secret em Settings > Secrets and variables > Actions.
+          VITE_API_URL: ${{ secrets.VITE_API_URL_PRODUCTION }}
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/pages-action@v1
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          projectName: flash-cell-store
+          directory: frontend/dist
+
+  # O backend no Railway normalmente faz deploy automático a cada push na
+  # main assim que você conecta o repositório pelo painel deles — não
+  # costuma precisar de um step de GitHub Actions dedicado. Se preferir
+  # controlar por aqui mesmo, veja a Railway CLI Action:
+  # https://docs.railway.app/guides/cli#github-actions

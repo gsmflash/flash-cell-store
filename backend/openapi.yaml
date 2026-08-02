@@ -1,0 +1,484 @@
+openapi: 3.0.3
+info:
+  title: Flash Cell Store API
+  version: '1.0'
+  description: |
+    API do sistema Flash Cell Store — loja virtual, assistência técnica e
+    painel administrativo.
+
+    **Autenticação:** a maioria dos endpoints exige um `Authorization: Bearer
+    <accessToken>`, obtido em `/auth/login` ou `/auth/register`. Access
+    tokens expiram em 15 minutos; use `/auth/refresh` com o `refreshToken`
+    para renovar sem precisar logar de novo.
+
+    **Formato de resposta:** toda resposta segue `{ status: 'ok' | 'error',
+    data, meta?, message? }`. Listagens paginadas incluem `meta: { total,
+    page, perPage, totalPages }`.
+servers:
+  - url: /api
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    ApiError:
+      type: object
+      properties:
+        status: { type: string, example: error }
+        message: { type: string }
+    PaginationMeta:
+      type: object
+      properties:
+        total: { type: integer }
+        page: { type: integer }
+        perPage: { type: integer }
+        totalPages: { type: integer }
+tags:
+  - name: Auth
+  - name: Catálogo
+  - name: Estoque
+  - name: Ordens de Serviço
+  - name: Carrinho e Pedidos
+  - name: Garantias
+  - name: Pagamentos
+  - name: Administração
+
+paths:
+  /health:
+    get:
+      tags: [Auth]
+      summary: Health check (sem autenticação)
+      security: []
+      responses:
+        '200': { description: Serviço operacional }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Cria uma conta de cliente e retorna a sessão
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string, description: 'Mínimo 8 caracteres, 1 maiúscula, 1 número' }
+                phone: { type: string }
+      responses:
+        '201': { description: Conta criada, sessão retornada }
+        '400': { description: Dados inválidos }
+        '409': { description: E-mail já cadastrado }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login — retorna access e refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string }
+                password: { type: string }
+      responses:
+        '200': { description: Login bem-sucedido }
+        '401': { description: Credenciais inválidas }
+        '429': { description: Muitas tentativas — bloqueio temporário }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Renova o access token usando o refresh token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: Novo par de tokens }
+        '401': { description: Refresh token inválido ou expirado }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Dados do usuário autenticado
+      responses:
+        '200': { description: Perfil do usuário }
+
+  /brands:
+    get:
+      tags: [Catálogo]
+      summary: Lista marcas
+      security: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: perPage, in: query, schema: { type: integer } }
+        - { name: search, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Lista de marcas }
+    post:
+      tags: [Administração]
+      summary: Cria marca (admin)
+      responses:
+        '201': { description: Marca criada }
+
+  /categories:
+    get:
+      tags: [Catálogo]
+      summary: Lista categorias (em árvore ou lista plana)
+      security: []
+      parameters:
+        - { name: format, in: query, schema: { type: string, enum: [tree, flat] } }
+      responses:
+        '200': { description: Lista/árvore de categorias }
+
+  /products:
+    get:
+      tags: [Catálogo]
+      summary: Lista produtos com filtros
+      security: []
+      parameters:
+        - { name: page, in: query, schema: { type: integer } }
+        - { name: perPage, in: query, schema: { type: integer } }
+        - { name: search, in: query, schema: { type: string } }
+        - { name: brandId, in: query, schema: { type: string, format: uuid } }
+        - { name: categoryId, in: query, schema: { type: string, format: uuid } }
+        - { name: minPrice, in: query, schema: { type: number } }
+        - { name: maxPrice, in: query, schema: { type: number } }
+        - { name: isFeatured, in: query, schema: { type: boolean } }
+      responses:
+        '200': { description: Lista de produtos }
+    post:
+      tags: [Administração]
+      summary: Cria produto (admin)
+      responses:
+        '201': { description: Produto criado }
+
+  /products/slug/{slug}:
+    get:
+      tags: [Catálogo]
+      summary: Detalhe do produto por slug
+      security: []
+      parameters:
+        - { name: slug, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: Produto com imagens e estoque }
+        '404': { description: Produto não encontrado }
+
+  /products/{id}:
+    get:
+      tags: [Catálogo]
+      summary: Detalhe do produto por id
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Produto com imagens e estoque }
+
+  /stock/low:
+    get:
+      tags: [Estoque]
+      summary: Produtos com estoque no ou abaixo do mínimo (staff)
+      responses:
+        '200': { description: Lista de alertas de estoque baixo }
+
+  /stock/movements:
+    get:
+      tags: [Estoque]
+      summary: Histórico de movimentações (staff)
+      parameters:
+        - { name: productId, in: query, schema: { type: string, format: uuid } }
+        - { name: type, in: query, schema: { type: string, enum: [in, out, adjustment, return, loss] } }
+      responses:
+        '200': { description: Histórico de movimentações }
+    post:
+      tags: [Estoque]
+      summary: Registra uma movimentação de estoque (staff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId, type, quantity]
+              properties:
+                productId: { type: string, format: uuid }
+                type: { type: string, enum: [in, out, adjustment, return, loss] }
+                quantity: { type: integer }
+                notes: { type: string }
+      responses:
+        '201': { description: Movimentação registrada, saldo atualizado }
+        '409': { description: Estoque insuficiente para o tipo de movimentação }
+
+  /service-orders:
+    get:
+      tags: [Ordens de Serviço]
+      summary: Lista ordens de serviço (staff)
+      parameters:
+        - { name: status, in: query, schema: { type: string } }
+        - { name: technicianId, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Lista de OS }
+    post:
+      tags: [Ordens de Serviço]
+      summary: Abre uma nova OS (staff)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [customerId, deviceType, deviceBrand, deviceModel]
+              properties:
+                customerId: { type: string, format: uuid }
+                deviceType: { type: string, enum: [smartphone, tablet, smartwatch, laptop, desktop, other] }
+                deviceBrand: { type: string }
+                deviceModel: { type: string }
+                customerComplaint: { type: string }
+      responses:
+        '201': { description: 'OS criada com número sequencial (ex.: OS-2026-0001)' }
+
+  /service-orders/{id}/status:
+    patch:
+      tags: [Ordens de Serviço]
+      summary: Muda o status da OS (staff) — valida transição
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string }
+                notes: { type: string }
+      responses:
+        '200': { description: Status atualizado, histórico registrado }
+        '409': { description: Transição de status inválida }
+
+  /service-orders/{id}/parts:
+    post:
+      tags: [Ordens de Serviço]
+      summary: Registra peça usada na OS — dá baixa de estoque atomicamente
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: Peça registrada e estoque atualizado }
+        '409': { description: Estoque insuficiente — peça não é registrada }
+
+  /cart:
+    get:
+      tags: [Carrinho e Pedidos]
+      summary: Carrinho atual (anônimo via X-Session-Id, ou do cliente logado)
+      security: []
+      parameters:
+        - { name: X-Session-Id, in: header, schema: { type: string }, description: 'Obrigatório se não autenticado' }
+      responses:
+        '200': { description: Carrinho com itens e subtotal }
+    delete:
+      tags: [Carrinho e Pedidos]
+      summary: Esvazia o carrinho
+      security: []
+      responses:
+        '200': { description: Carrinho vazio }
+
+  /cart/items:
+    post:
+      tags: [Carrinho e Pedidos]
+      summary: Adiciona item ao carrinho
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId]
+              properties:
+                productId: { type: string, format: uuid }
+                quantity: { type: integer, default: 1 }
+      responses:
+        '201': { description: Carrinho atualizado }
+
+  /cart/merge:
+    post:
+      tags: [Carrinho e Pedidos]
+      summary: Funde o carrinho anônimo no carrinho do cliente logado (chamar logo após login)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sessionId]
+              properties:
+                sessionId: { type: string }
+      responses:
+        '200': { description: Carrinho fundido }
+
+  /orders:
+    get:
+      tags: [Carrinho e Pedidos]
+      summary: Lista pedidos (próprios, ou todos se staff)
+      responses:
+        '200': { description: Lista de pedidos }
+    post:
+      tags: [Carrinho e Pedidos]
+      summary: Cria pedido a partir do carrinho (checkout)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                addressId: { type: string, format: uuid }
+                couponCode: { type: string }
+      responses:
+        '201': { description: Pedido criado, estoque baixado, carrinho limpo }
+        '409': { description: Estoque insuficiente para algum item }
+
+  /orders/{id}/cancel:
+    patch:
+      tags: [Carrinho e Pedidos]
+      summary: Cancela o pedido e reverte o estoque
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Pedido cancelado, estoque revertido }
+        '409': { description: 'Pedido não pode mais ser cancelado (já enviado)' }
+
+  /coupon-preview:
+    post:
+      tags: [Carrinho e Pedidos]
+      summary: Valida um cupom e retorna o desconto, sem criar pedido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code, subtotal]
+              properties:
+                code: { type: string }
+                subtotal: { type: number }
+      responses:
+        '200': { description: Cupom válido, desconto calculado }
+        '400': { description: Cupom inválido/expirado/fora das regras }
+
+  /favorites:
+    get:
+      tags: [Carrinho e Pedidos]
+      summary: Lista favoritos do cliente logado
+      responses:
+        '200': { description: Lista de produtos favoritados }
+
+  /addresses:
+    get:
+      tags: [Carrinho e Pedidos]
+      summary: Lista endereços do cliente logado
+      responses:
+        '200': { description: Lista de endereços }
+    post:
+      tags: [Carrinho e Pedidos]
+      summary: Cadastra um endereço
+      responses:
+        '201': { description: Endereço criado }
+
+  /warranties/lookup:
+    get:
+      tags: [Garantias]
+      summary: Consulta pública de garantia por IMEI/série ou CPF/CNPJ
+      security: []
+      parameters:
+        - { name: imei, in: query, schema: { type: string } }
+        - { name: document, in: query, schema: { type: string } }
+      responses:
+        '200': { description: Garantias encontradas }
+
+  /warranties/{id}/claim:
+    post:
+      tags: [Garantias]
+      summary: Registra o acionamento de uma garantia (staff)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Acionamento registrado }
+        '409': { description: Garantia expirada ou anulada }
+
+  /payments/orders/{orderId}/pix:
+    post:
+      tags: [Pagamentos]
+      summary: Gera cobrança PIX para o pedido (Mercado Pago)
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: QR code PIX gerado }
+
+  /payments/orders/{orderId}/card:
+    post:
+      tags: [Pagamentos]
+      summary: Cria checkout de cartão/boleto (Mercado Pago Checkout Pro)
+      parameters:
+        - { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '201': { description: URL de redirecionamento para o Checkout Pro }
+
+  /payments/webhook:
+    post:
+      tags: [Pagamentos]
+      summary: Webhook do Mercado Pago (chamado pelos servidores deles, não pelo navegador)
+      security: []
+      responses:
+        '200': { description: Sempre retorna 200 — Mercado Pago faz retry em qualquer outro código }
+
+  /payments/{id}/refund:
+    post:
+      tags: [Pagamentos]
+      summary: Reembolsa um pagamento confirmado (admin)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Pagamento reembolsado, pedido atualizado }
+
+  /dashboard/stats:
+    get:
+      tags: [Administração]
+      summary: Métricas do painel administrativo (admin)
+      responses:
+        '200': { description: Vendas, pedidos por status, estoque baixo, OS em aberto, etc. }
+
+  /users:
+    get:
+      tags: [Administração]
+      summary: Lista usuários (admin)
+      responses:
+        '200': { description: Lista de usuários }
+
+  /logs:
+    get:
+      tags: [Administração]
+      summary: Logs do sistema, somente leitura (admin)
+      parameters:
+        - { name: level, in: query, schema: { type: string, enum: [debug, info, warning, error, critical] } }
+      responses:
+        '200': { description: Lista de logs }

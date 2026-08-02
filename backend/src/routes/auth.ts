@@ -4,10 +4,35 @@ import { eq } from 'drizzle-orm';
 import { db } from '../db/index';
 import { users, profiles } from '../db/schema/index';
 import { hashPassword, comparePassword } from '../lib/hash';
-import { generateTokenPair, verifyToken } from '../lib/jwt';
+import { generateTokenPair, verifyRefreshToken } from '../lib/jwt';
 import { authenticate } from '../middleware/auth';
+import { rateLimiter } from '../middleware/rateLimiter';
+import { isLoginBlocked, registerFailedLoginAttempt, resetLoginAttempts } from '../lib/loginAttempts';
+import { describeConstraintError } from '../lib/dbErrors';
 
 const router: Router = Router();
+
+// ─── Rate limiting ─────────────────────────────────────────────────────────────
+// Login: janela curta e limite baixo por IP — é o alvo mais sensível a força bruta.
+const loginRateLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Muitas tentativas de login a partir deste IP. Tente novamente mais tarde.',
+});
+
+// Registro: mais permissivo, mas ainda protegido contra criação massiva de contas.
+const registerRateLimiter = rateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 20,
+  message: 'Muitas tentativas de cadastro a partir deste IP. Tente novamente mais tarde.',
+});
+
+// Refresh: previne abuso do endpoint para tentativa de força bruta de tokens.
+const refreshRateLimiter = rateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: 'Muitas requisições de refresh a partir deste IP. Tente novamente mais tarde.',
+});
 
 // ─── Schemas de validação Zod ─────────────────────────────────────────────────
 
@@ -32,7 +57,7 @@ const refreshSchema = z.object({
 });
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
-router.post('/login', async (req: Request, res: Response): Promise<void> => {
+router.post('/login', loginRateLimiter, async (req: Request, res: Response): Promise<void> => {
   const result = loginSchema.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ status: 'error', message: result.error.errors[0]?.message });
@@ -40,29 +65,47 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
   }
 
   const { email, password } = result.data;
+  const normalizedEmail = email.toLowerCase();
+
+  // Bloqueio por conta: protege contra tentativas distribuídas em vários IPs
+  // contra a mesma conta. Mensagem genérica — não revela se é a conta ou o
+  // rate limiter por IP que está bloqueando.
+  if (isLoginBlocked(normalizedEmail)) {
+    res.status(429).json({
+      status: 'error',
+      message: 'Muitas tentativas de login. Tente novamente mais tarde.',
+    });
+    return;
+  }
 
   try {
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email.toLowerCase()))
-      .limit(1);
+    const [user] = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
 
     if (!user) {
+      registerFailedLoginAttempt(normalizedEmail);
       res.status(401).json({ status: 'error', message: 'Credenciais inválidas.' });
       return;
     }
 
     if (!user.isActive) {
+      // Não conta como tentativa de força bruta (a senha nem chega a ser
+      // conferida), mas também não informamos que a conta existe e está
+      // apenas desativada de forma diferente do caso de credenciais erradas
+      // — aqui optamos por manter explícito porque é uma mensagem operacional
+      // útil para o próprio dono da conta, não uma pista para um atacante
+      // adivinhar e-mails válidos com uma única tentativa.
       res.status(403).json({ status: 'error', message: 'Conta desativada. Contate o suporte.' });
       return;
     }
 
     const passwordMatch = await comparePassword(password, user.passwordHash);
     if (!passwordMatch) {
+      registerFailedLoginAttempt(normalizedEmail);
       res.status(401).json({ status: 'error', message: 'Credenciais inválidas.' });
       return;
     }
+
+    resetLoginAttempts(normalizedEmail);
 
     // Atualiza último login
     await db
@@ -90,7 +133,7 @@ router.post('/login', async (req: Request, res: Response): Promise<void> => {
 });
 
 // ─── POST /api/auth/register ──────────────────────────────────────────────────
-router.post('/register', async (req: Request, res: Response): Promise<void> => {
+router.post('/register', registerRateLimiter, async (req: Request, res: Response): Promise<void> => {
   const result = registerSchema.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ status: 'error', message: result.error.errors[0]?.message });
@@ -150,6 +193,16 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
       },
     });
   } catch (err) {
+    // A checagem de e-mail duplicado acima cobre o caso comum, mas não
+    // elimina uma condição de corrida (duas requisições simultâneas com o
+    // mesmo e-mail). A constraint unique no banco é a garantia final —
+    // aqui só traduzimos o erro do Postgres em algo seguro para o cliente.
+    const constraintError = describeConstraintError(err);
+    if (constraintError) {
+      res.status(constraintError.statusCode).json({ status: 'error', message: constraintError.message });
+      return;
+    }
+
     console.error('[auth/register]', err);
     res.status(500).json({ status: 'error', message: 'Erro interno ao realizar cadastro.' });
   }
@@ -190,7 +243,7 @@ router.get('/me', authenticate, async (req: Request, res: Response): Promise<voi
 });
 
 // ─── POST /api/auth/refresh ───────────────────────────────────────────────────
-router.post('/refresh', (req: Request, res: Response): void => {
+router.post('/refresh', refreshRateLimiter, (req: Request, res: Response): void => {
   const result = refreshSchema.safeParse(req.body);
   if (!result.success) {
     res.status(400).json({ status: 'error', message: result.error.errors[0]?.message });
@@ -198,7 +251,10 @@ router.post('/refresh', (req: Request, res: Response): void => {
   }
 
   try {
-    const payload = verifyToken(result.data.refreshToken);
+    // verifyRefreshToken rejeita explicitamente um access token apresentado
+    // aqui (payload.type !== 'refresh'), além de checar assinatura/expiração
+    // contra o segredo dedicado de refresh.
+    const payload = verifyRefreshToken(result.data.refreshToken);
     const tokens = generateTokenPair({
       sub: payload.sub,
       email: payload.email,

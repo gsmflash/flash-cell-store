@@ -1,1 +1,11 @@
-/*  /index.html  200
+# O fallback de SPA (rotas do React Router funcionando em refresh/link direto)
+# não usa mais _redirects — o Cloudflare Pages rejeitou "/* /index.html 200"
+# como "infinite loop" na validação deles. Em vez disso, o build gera um
+# dist/404.html idêntico ao index.html (ver frontend/package.json), que o
+# Cloudflare Pages serve automaticamente pra qualquer rota não encontrada —
+# o React Router então assume a partir daí no client, normalmente.
+
+# sitemap.xml: Cloudflare Pages não permite proxy (200) pra URL externa
+# absoluta — só redirects de verdade. Troque a URL abaixo pela URL real do
+# seu backend em produção antes de publicar.
+/sitemap.xml  https://flash-cell-api.up.railway.app/sitemap.xml  301

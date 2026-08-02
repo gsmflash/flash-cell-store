@@ -3,6 +3,7 @@ import {
   type AnyPgColumn,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
+import { warrantyPolicies } from './warranty-policies';
 
 // ─── Marcas ───────────────────────────────────────────────────────────────────
 export const brands = pgTable('brands', {
@@ -35,6 +36,9 @@ export const products = pgTable('products', {
   id: uuid('id').defaultRandom().primaryKey(),
   brandId: uuid('brand_id').references(() => brands.id, { onDelete: 'set null' }),
   categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
+  // Política de garantia vinculada — opcional. Se não tiver nenhuma
+  // vinculada, o sistema usa o padrão de 90 dias (ver lib/warrantyRules.ts).
+  warrantyPolicyId: uuid('warranty_policy_id').references(() => warrantyPolicies.id, { onDelete: 'set null' }),
   name: varchar('name', { length: 255 }).notNull(),
   slug: varchar('slug', { length: 255 }).notNull().unique(),
   sku: varchar('sku', { length: 100 }).unique(),
@@ -82,6 +86,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
 export const productsRelations = relations(products, ({ one, many }) => ({
   brand: one(brands, { fields: [products.brandId], references: [brands.id] }),
   category: one(categories, { fields: [products.categoryId], references: [categories.id] }),
+  warrantyPolicy: one(warrantyPolicies, { fields: [products.warrantyPolicyId], references: [warrantyPolicies.id] }),
   images: many(productImages),
 }));
 

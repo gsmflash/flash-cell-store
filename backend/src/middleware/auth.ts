@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyToken, type JwtPayload } from '../lib/jwt';
+import { verifyAccessToken, type JwtPayload } from '../lib/jwt';
 
 // Estende o tipo Request do Express para incluir o usuário autenticado
 declare global {
@@ -25,12 +25,34 @@ export const authenticate = (req: Request, res: Response, next: NextFunction): v
   const token = authHeader.slice(7); // Remove "Bearer "
 
   try {
-    const payload = verifyToken(token);
+    const payload = verifyAccessToken(token);
     req.user = payload;
     next();
   } catch {
+    // Não diferenciamos "expirado" de "inválido" nem "tipo errado" na resposta
+    // para o cliente — evita dar pistas úteis a quem está tentando forjar tokens.
     res.status(401).json({ status: 'error', message: 'Token inválido ou expirado.' });
   }
+};
+
+/**
+ * Como authenticate, mas não bloqueia a requisição se não houver token (ou
+ * se ele for inválido) — apenas deixa req.user populado quando possível.
+ * Usado em rotas que servem tanto visitantes anônimos quanto logados, como
+ * o carrinho.
+ */
+export const optionalAuth = (req: Request, _res: Response, next: NextFunction): void => {
+  const authHeader = req.headers.authorization;
+
+  if (authHeader?.startsWith('Bearer ')) {
+    try {
+      req.user = verifyAccessToken(authHeader.slice(7));
+    } catch {
+      // Token ausente/inválido em rota opcional: segue como anônimo.
+    }
+  }
+
+  next();
 };
 
 /**

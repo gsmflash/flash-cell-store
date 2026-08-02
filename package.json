@@ -6,7 +6,7 @@
     "dev": "pnpm --parallel --filter \"@flash-cell/*\" run dev",
     "dev:backend": "pnpm --filter @flash-cell/backend run dev",
     "dev:frontend": "pnpm --filter @flash-cell/frontend run dev",
-    "build": "pnpm --filter @flash-cell/shared run build && pnpm --filter \"@flash-cell/backend\" run build && pnpm --filter \"@flash-cell/frontend\" run build",
+    "build": "pnpm --filter \"@flash-cell/backend\" run build && pnpm --filter \"@flash-cell/frontend\" run build",
     "typecheck": "pnpm -r run typecheck",
     "db:generate": "pnpm --filter @flash-cell/backend run db:generate",
     "db:migrate": "pnpm --filter @flash-cell/backend run db:migrate",

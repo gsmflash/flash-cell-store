@@ -54,7 +54,20 @@
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-paper text-ink font-sans antialiased;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1, h2, h3, h4 {
+    @apply font-display;
+  }
+}
+
+@layer utilities {
+  /* Borda "picotada" de ticket de assistência técnica — usada nos cards de produto */
+  .ticket-edge {
+    background-image: radial-gradient(circle, hsl(var(--border)) 1.5px, transparent 1.5px);
+    background-size: 10px 10px;
+    background-repeat: repeat-x;
+    background-position: left center;
   }
 }

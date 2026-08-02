@@ -69,8 +69,17 @@ export const paymentMethodEnum = pgEnum('payment_method', [
   'boleto',      // Boleto
   'cash',        // Dinheiro
   'transfer',    // Transferência
+  'installment', // Crediário
   'other',
 ]);
+
+// Situação de uma conta a receber (ou o resumo financeiro de uma OS) —
+// deliberadamente simples e genérico o suficiente pra servir tanto contas a
+// receber de OS quanto, no futuro, de pedidos ou lançamentos manuais.
+export const receivableStatusEnum = pgEnum('receivable_status', ['pending', 'partial', 'paid']);
+
+// Tipo de desconto: valor fixo em reais, ou percentual sobre o subtotal.
+export const discountTypeEnum = pgEnum('discount_type', ['fixed', 'percentage']);
 
 // Tipo de cupom
 export const couponTypeEnum = pgEnum('coupon_type', ['percentage', 'fixed']);

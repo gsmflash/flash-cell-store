@@ -5,7 +5,7 @@ import { relations } from 'drizzle-orm';
 import { users } from './users';
 import { customers } from './customers';
 import { products } from './catalog';
-import { serviceOrderStatusEnum, deviceTypeEnum } from './enums';
+import { serviceOrderStatusEnum, deviceTypeEnum, discountTypeEnum, receivableStatusEnum } from './enums';
 
 // ─── Técnicos ─────────────────────────────────────────────────────────────────
 export const technicians = pgTable('technicians', {
@@ -63,8 +63,18 @@ export const serviceOrders = pgTable('service_orders', {
   devicePassword: varchar('device_password', { length: 100 }), // Senha de desbloqueio
   // Financeiro
   estimatedValue: numeric('estimated_value', { precision: 12, scale: 2 }),
-  finalValue: numeric('final_value', { precision: 12, scale: 2 }),
+  // Valor total antes do desconto (soma de serviços + peças, "congelada"
+  // no momento da finalização — não recalculada depois, pra manter o
+  // histórico fiel ao que foi acordado com o cliente).
+  subtotalValue: numeric('subtotal_value', { precision: 12, scale: 2 }),
   discount: numeric('discount', { precision: 12, scale: 2 }).default('0'),
+  discountType: discountTypeEnum('discount_type'),
+  finalValue: numeric('final_value', { precision: 12, scale: 2 }),
+  // Cache/resumo — a fonte de verdade de quanto já foi pago está em
+  // payment_records; este campo existe só pra listar/filtrar OS rapidamente
+  // sem precisar somar pagamentos toda vez. Recalculado a cada pagamento.
+  financialStatus: receivableStatusEnum('financial_status'),
+  financialNotes: text('financial_notes'),
   // Datas
   receivedAt: timestamp('received_at', { withTimezone: true }).notNull().defaultNow(),
   estimatedCompletionAt: timestamp('estimated_completion_at', { withTimezone: true }),
